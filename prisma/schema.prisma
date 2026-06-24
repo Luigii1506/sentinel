@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ChangeType {
+  created
+  updated
+  unchanged
+}
+
+model Source {
+  id        String         @id @default(cuid())
+  name      String
+  region    String
+  type      String
+  baseUrl   String?
+  metadata  Json?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  rawDocuments RawDocument[]
+  extractRuns  ExtractRun[]
+  observations Observation[]
+
+  @@unique([name, region, type])
+}
+
+model RawDocument {
+  id          String   @id @default(cuid())
+  sourceId    String
+  url         String
+  contentType String?
+  bodyHash    String
+  bodyText    String?
+  storageUrl  String?
+  storedAt    DateTime @default(now())
+
+  source       Source        @relation(fields: [sourceId], references: [id])
+  observations Observation[]
+}
+
+model ExtractRun {
+  id               String   @id @default(cuid())
+  sourceId         String
+  startedAt        DateTime @default(now())
+  finishedAt       DateTime?
+  extractorVersion String?
+  stats            Json?
+
+  source       Source        @relation(fields: [sourceId], references: [id])
+  observations Observation[]
+}
+
+model Observation {
+  id                String   @id @default(cuid())
+  sourceId          String
+  rawDocumentId     String
+  extractRunId      String?
+  sourceUrl         String
+  fetchedAt         DateTime @default(now())
+  payload           Json
+  extractionVersion String?
+
+  source      Source      @relation(fields: [sourceId], references: [id])
+  rawDocument RawDocument @relation(fields: [rawDocumentId], references: [id])
+  extractRun  ExtractRun? @relation(fields: [extractRunId], references: [id])
+  mappings    EntityMapping[]
+  changes     ChangeLog[]
+}
+
+model Entity {
+  id                  String   @id @default(cuid())
+  canonicalId         String
+  canonicalName       String
+  canonicalAttributes Json?
+  firstSeenAt         DateTime @default(now())
+  lastSeenAt          DateTime @default(now())
+
+  mappings  EntityMapping[]
+  changes   ChangeLog[]
+
+  @@unique([canonicalId])
+}
+
+model EntityMapping {
+  id            String   @id @default(cuid())
+  entityId      String
+  observationId String
+  confidence    Float?
+  ruleUsed      String?
+  createdAt     DateTime @default(now())
+
+  entity      Entity      @relation(fields: [entityId], references: [id])
+  observation Observation @relation(fields: [observationId], references: [id])
+
+  @@unique([entityId, observationId])
+}
+
+model ChangeLog {
+  id            String     @id @default(cuid())
+  entityId      String
+  observationId String
+  changedFields String[]
+  changeType    ChangeType
+  diff          Json
+  detectedAt    DateTime   @default(now())
+
+  entity      Entity      @relation(fields: [entityId], references: [id])
+  observation Observation @relation(fields: [observationId], references: [id])
+}
